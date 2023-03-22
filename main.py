@@ -226,6 +226,7 @@ def wrapper(func, /, *args, **kwds):
 
         curses.noecho()
         curses.cbreak()
+        curses.set_escdelay(25)
 
         screen.keypad(True)
 
