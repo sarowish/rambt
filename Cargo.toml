@@ -1,0 +1,14 @@
+[package]
+name = "rambt"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+musicbrainz_rs = "0.5.0"
+futures = "0.3.27"
+ratatui = "0.20.1"
+tokio = { version = "1.26.0", features = ["time", "macros", "rt-multi-thread"] }
+rusqlite = "0.28.0"
+crossterm = "0.26.1"
+anyhow = "1.0.70"
+dirs = "5.0.0"

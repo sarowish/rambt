@@ -1,0 +1,114 @@
+use std::fmt::Display;
+
+use musicbrainz_rs::{
+    entity::{
+        artist::{Artist, ArtistSearchQuery},
+        release_group::{ReleaseGroup, ReleaseGroupPrimaryType},
+    },
+    prelude::*,
+};
+
+pub struct ArtistSearchResult {
+    pub id: String,
+    pub name: String,
+    pub disambiguation: String,
+}
+
+impl Display for ArtistSearchResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ({})", self.name, self.disambiguation)
+    }
+}
+
+impl From<&Artist> for ArtistSearchResult {
+    fn from(value: &Artist) -> Self {
+        ArtistSearchResult {
+            id: value.id.to_string(),
+            name: value.name.to_string(),
+            disambiguation: value.disambiguation.to_string(),
+        }
+    }
+}
+
+pub struct Release {
+    pub id: String,
+    pub title: String,
+    pub year: String,
+    pub rating: Option<u8>,
+}
+
+impl Release {
+    pub fn increase_rating(&mut self) {
+        if let Some(rating) = self.rating.as_mut() {
+            if *rating != 10 {
+                *rating += 1;
+            }
+        }
+    }
+
+    pub fn decrease_rating(&mut self) {
+        if let Some(rating) = self.rating.as_mut() {
+            if *rating != 1 {
+                *rating -= 1;
+            }
+        }
+    }
+}
+
+impl Display for Release {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}) {}", self.year, self.title)
+    }
+}
+
+impl From<&ReleaseGroup> for Release {
+    fn from(value: &ReleaseGroup) -> Self {
+        Release {
+            id: value.id.to_string(),
+            title: value.title.to_string(),
+            year: value
+                .first_release_date
+                .unwrap_or_default()
+                .format("%Y")
+                .to_string(),
+            rating: None,
+        }
+    }
+}
+
+pub async fn search_artist(artist_name: &str) -> Result<Vec<ArtistSearchResult>, Error> {
+    let query = ArtistSearchQuery::query_builder()
+        .artist(artist_name)
+        .build();
+
+    let query_result = Artist::search(query).execute().await?;
+
+    Ok(query_result
+        .entities
+        .iter()
+        .map(ArtistSearchResult::from)
+        .collect::<Vec<ArtistSearchResult>>())
+}
+
+pub async fn fetch_releases(artist_id: &str) -> Result<Option<Vec<Release>>, Error> {
+    let artist = Artist::fetch()
+        .with_release_groups()
+        .id(artist_id)
+        .execute()
+        .await?;
+
+    Ok(artist.release_groups.map(|release_groups| {
+        release_groups
+            .iter()
+            .filter(|release_group| is_album(release_group))
+            .map(Release::from)
+            .collect::<Vec<Release>>()
+    }))
+}
+
+fn is_album(release_group: &ReleaseGroup) -> bool {
+    matches!(
+        release_group.primary_type,
+        Some(ReleaseGroupPrimaryType::Album)
+    ) && release_group.secondary_types.is_empty()
+}
