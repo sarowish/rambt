@@ -124,7 +124,7 @@ pub fn render_releases<B: Backend>(f: &mut Frame<B>, app: &mut App) {
             Spans::from(vec![
                 Span::styled(
                     format!(
-                        "{} {}",
+                        "{} {} ",
                         if index == selected_index { ">" } else { " " },
                         release
                     ),
@@ -144,7 +144,6 @@ pub fn render_releases<B: Backend>(f: &mut Frame<B>, app: &mut App) {
                         style
                     },
                 ),
-                Span::raw(" "),
                 Span::styled(
                     stars,
                     Style::default()
