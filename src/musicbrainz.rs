@@ -1,12 +1,12 @@
-use std::fmt::Display;
-
+use crate::app::ReleaseType;
 use musicbrainz_rs::{
     entity::{
         artist::{Artist, ArtistSearchQuery},
-        release_group::{ReleaseGroup, ReleaseGroupPrimaryType},
+        release_group::ReleaseGroup,
     },
     prelude::*,
 };
+use std::fmt::Display;
 
 pub struct ArtistSearchResult {
     pub id: String,
@@ -34,6 +34,7 @@ pub struct Release {
     pub id: String,
     pub title: String,
     pub year: String,
+    pub group_type: ReleaseType,
     pub rating: Option<u8>,
 }
 
@@ -61,8 +62,8 @@ impl Display for Release {
     }
 }
 
-impl From<&ReleaseGroup> for Release {
-    fn from(value: &ReleaseGroup) -> Self {
+impl From<ReleaseGroup> for Release {
+    fn from(value: ReleaseGroup) -> Self {
         Release {
             id: value.id.to_string(),
             title: value.title.to_string(),
@@ -71,6 +72,7 @@ impl From<&ReleaseGroup> for Release {
                 .unwrap_or_default()
                 .format("%Y")
                 .to_string(),
+            group_type: ReleaseType::new(value.primary_type, value.secondary_types),
             rating: None,
         }
     }
@@ -99,16 +101,8 @@ pub async fn fetch_releases(artist_id: &str) -> Result<Option<Vec<Release>>, Err
 
     Ok(artist.release_groups.map(|release_groups| {
         release_groups
-            .iter()
-            .filter(|release_group| is_album(release_group))
+            .into_iter()
             .map(Release::from)
             .collect::<Vec<Release>>()
     }))
-}
-
-fn is_album(release_group: &ReleaseGroup) -> bool {
-    matches!(
-        release_group.primary_type,
-        Some(ReleaseGroupPrimaryType::Album)
-    ) && release_group.secondary_types.is_empty()
 }

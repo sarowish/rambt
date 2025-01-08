@@ -1,11 +1,55 @@
 use crate::{database, musicbrainz::*, ui::StatefulList, utils::get_database_path};
 use anyhow::Result;
 use futures::executor;
+use musicbrainz_rs::entity::release_group::{ReleaseGroupPrimaryType, ReleaseGroupSecondaryType};
 use rusqlite::Connection;
+use serde::Serialize;
+use std::fmt::Display;
+
+#[derive(PartialEq, Eq, Clone)]
+pub struct ReleaseType {
+    primary: Option<ReleaseGroupPrimaryType>,
+    secondary: Vec<ReleaseGroupSecondaryType>,
+}
+
+impl ReleaseType {
+    pub fn new(
+        primary: Option<ReleaseGroupPrimaryType>,
+        secondary: Vec<ReleaseGroupSecondaryType>,
+    ) -> Self {
+        Self { primary, secondary }
+    }
+}
+
+impl Display for ReleaseType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut result = Vec::new();
+
+        if let Some(primary) = &self.primary {
+            result.push(release_type_to_string(primary));
+        }
+
+        result.extend(self.secondary.iter().map(release_type_to_string));
+
+        write!(f, "{}", result.join(" + "))
+    }
+}
+
+fn release_type_to_string<T: Serialize>(value: &T) -> String {
+    serde_json::to_string(value)
+        .unwrap()
+        .trim_matches('"')
+        .to_string()
+}
+
+pub enum ListItemType {
+    ReleaseType(ReleaseType),
+    Release(Release),
+}
 
 pub struct App {
     pub search_results: StatefulList<ArtistSearchResult>,
-    pub releases: Option<StatefulList<Release>>,
+    pub releases: Option<StatefulList<ListItemType>>,
     pub currently_rating: bool,
     previous_rating: Option<u8>,
     conn: Connection,
@@ -34,11 +78,23 @@ impl App {
     }
 
     fn get_selected_release(&self) -> &Release {
-        self.releases.as_ref().unwrap().get_selected().unwrap()
+        if let Some(releases) = &self.releases {
+            if let Some(ListItemType::Release(release)) = releases.get_selected() {
+                return release;
+            }
+        }
+
+        unreachable!();
     }
 
     fn get_mut_selected_release(&mut self) -> &mut Release {
-        self.releases.as_mut().unwrap().get_mut_selected().unwrap()
+        if let Some(releases) = &mut self.releases {
+            if let Some(ListItemType::Release(release)) = releases.get_mut_selected() {
+                return release;
+            }
+        }
+
+        unreachable!();
     }
 
     pub fn on_down(&mut self) {
@@ -48,6 +104,10 @@ impl App {
 
         if let Some(releases) = &mut self.releases {
             releases.next();
+
+            if let Some(ListItemType::ReleaseType(_)) = releases.get_selected() {
+                releases.next();
+            }
         } else {
             self.search_results.next();
         }
@@ -60,6 +120,10 @@ impl App {
 
         if let Some(releases) = &mut self.releases {
             releases.previous();
+
+            if let Some(ListItemType::ReleaseType(_)) = releases.get_selected() {
+                releases.previous();
+            }
         } else {
             self.search_results.previous();
         }
@@ -78,18 +142,19 @@ impl App {
             self.get_mut_selected_release().increase_rating();
         } else if self.releases.is_none() {
             if let Some(artist) = self.search_results.get_selected() {
-                if let Ok(Some(release)) = executor::block_on(fetch_releases(&artist.id)) {
-                    self.releases = Some(StatefulList::with_items(release));
-
+                if let Ok(Some(mut releases)) = executor::block_on(fetch_releases(&artist.id)) {
                     let ratings = database::get_ratings(&self.conn, &artist.id)?;
 
                     for rating in ratings {
-                        for release in &mut self.releases.as_mut().unwrap().items {
+                        for release in &mut releases {
                             if release.id == rating.0 {
                                 release.rating = Some(rating.1);
                             }
                         }
                     }
+
+                    self.releases = Some(StatefulList::with_items(insert_headers(releases)));
+                    self.releases.as_mut().unwrap().next();
                 }
             }
         } else {
@@ -121,16 +186,10 @@ impl App {
         }
 
         let artist = self.search_results.get_selected().unwrap();
-        let release = self.releases.as_ref().unwrap().get_selected().unwrap();
+        let release = self.get_selected_release();
 
         database::add_artist(&self.conn, &artist.id, &artist.name)?;
-        database::add_release(
-            &self.conn,
-            &artist.id,
-            &release.id,
-            &release.title,
-            release.rating.unwrap(),
-        )?;
+        database::add_release(&self.conn, &artist.id, release)?;
 
         self.currently_rating = false;
 
@@ -145,4 +204,27 @@ impl App {
         self.currently_rating = false;
         self.get_mut_selected_release().rating = self.previous_rating;
     }
+}
+
+fn insert_headers(releases: Vec<Release>) -> Vec<ListItemType> {
+    let mut releases = releases.into_iter();
+    let mut result = if let Some(release) = releases.next() {
+        vec![
+            ListItemType::ReleaseType(release.group_type.clone()),
+            ListItemType::Release(release),
+        ]
+    } else {
+        return Vec::new();
+    };
+
+    for release in releases {
+        if matches!(result.last(), Some(ListItemType::Release(last_item)) if release.group_type != last_item.group_type)
+        {
+            result.push(ListItemType::ReleaseType(release.group_type.clone()));
+        }
+
+        result.push(ListItemType::Release(release));
+    }
+
+    result
 }

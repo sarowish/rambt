@@ -1,3 +1,4 @@
+use crate::musicbrainz::Release;
 use anyhow::Result;
 use rusqlite::{params, Connection};
 
@@ -43,20 +44,14 @@ pub fn add_artist(conn: &Connection, artist_id: &str, artist_name: &str) -> Resu
     Ok(())
 }
 
-pub fn add_release(
-    conn: &Connection,
-    artist_id: &str,
-    release_id: &str,
-    release_title: &str,
-    rating: u8,
-) -> Result<()> {
+pub fn add_release(conn: &Connection, artist_id: &str, release: &Release) -> Result<()> {
     conn.execute(
         "
             INSERT OR REPLACE INTO releases (artist_id, release_id, release_name, rating)
             VALUES(?, ?, ?, ?)
 
         ",
-        params![artist_id, release_id, release_title, rating],
+        params![artist_id, release.id, release.title, release.rating],
     )?;
 
     Ok(())

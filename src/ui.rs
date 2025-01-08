@@ -1,3 +1,4 @@
+use crate::app::{App, ListItemType};
 use ratatui::{
     backend::Backend,
     style::{Color, Modifier, Style},
@@ -5,8 +6,6 @@ use ratatui::{
     widgets::{List, ListItem, ListState},
     Frame,
 };
-
-use crate::app::App;
 
 pub struct StatefulList<T> {
     state: ListState,
@@ -98,69 +97,68 @@ pub fn render_search_results<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 }
 
 pub fn render_releases<B: Backend>(f: &mut Frame<B>, app: &mut App) {
-    let Some(selected_index) = app.releases.as_ref().unwrap().state.selected() else {
+    let Some(releases) = &mut app.releases else {
         return;
     };
 
-    let releases = app
-        .releases
-        .as_ref()
-        .unwrap()
-        .items
-        .iter()
-        .enumerate()
-        .map(|(index, release)| {
-            let mut stars = String::new();
-            let mut stars_filler = String::new();
+    let selected_index = releases.state.selected().unwrap();
+    let mut list_items = Vec::new();
 
-            if let Some(rating) = release.rating {
-                stars = "★ ".repeat(rating as usize / 2);
-                stars.push_str(&"⯨".repeat(rating as usize % 2));
+    for (idx, release) in releases.items.iter().enumerate() {
+        let item = match release {
+            ListItemType::ReleaseType(r#type) => vec![Span::styled(
+                r#type.to_string(),
+                Style::default().fg(Color::Green),
+            )],
+            ListItemType::Release(release) => {
+                let mut stars = String::new();
+                let mut stars_filler = String::new();
 
-                stars_filler = "⯩".repeat(rating as usize % 2);
-                stars_filler.push_str(&"★ ".repeat((10 - stars.chars().count()) / 2));
-            }
+                if let Some(rating) = release.rating {
+                    stars = "★ ".repeat(rating as usize / 2);
+                    stars.push_str(&"⯨".repeat(rating as usize % 2));
 
-            Spans::from(vec![
-                Span::styled(
-                    format!(
-                        "{} {} ",
-                        if index == selected_index { ">" } else { " " },
-                        release
+                    stars_filler = "⯩".repeat(rating as usize % 2);
+                    stars_filler.push_str(&"★ ".repeat((10 - stars.chars().count()) / 2));
+                }
+
+                vec![
+                    Span::styled(
+                        format!(
+                            "{} {} ",
+                            if idx == selected_index { ">" } else { " " },
+                            release
+                        ),
+                        {
+                            let mut style = Style::default();
+
+                            if idx == selected_index {
+                                style = style
+                                    .fg(if app.currently_rating {
+                                        Color::Blue
+                                    } else {
+                                        Color::Magenta
+                                    })
+                                    .add_modifier(Modifier::BOLD);
+                            }
+
+                            style
+                        },
                     ),
-                    {
-                        let mut style = Style::default();
+                    Span::styled(
+                        stars,
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(stars_filler, Style::default().add_modifier(Modifier::BOLD)),
+                ]
+            }
+        };
 
-                        if index == selected_index {
-                            style = style
-                                .fg(if app.currently_rating {
-                                    Color::Blue
-                                } else {
-                                    Color::Magenta
-                                })
-                                .add_modifier(Modifier::BOLD);
-                        }
+        list_items.push(ListItem::new(Spans::from(item)));
+    }
 
-                        style
-                    },
-                ),
-                Span::styled(
-                    stars,
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(stars_filler, Style::default().add_modifier(Modifier::BOLD)),
-            ])
-        })
-        .map(ListItem::new)
-        .collect::<Vec<ListItem>>();
-
-    let releases = List::new(releases);
-
-    f.render_stateful_widget(
-        releases,
-        f.size(),
-        &mut app.releases.as_mut().unwrap().state,
-    );
+    let list = List::new(list_items);
+    f.render_stateful_widget(list, f.size(), &mut releases.state);
 }
