@@ -62,7 +62,6 @@ async fn main() -> Result<()> {
 
 fn run_tui<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
     loop {
-        terminal.clear()?;
         terminal.draw(|f| render(f, app))?;
 
         if let Event::Key(key) = crossterm::event::read()? {
