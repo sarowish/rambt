@@ -15,18 +15,23 @@ use crossterm::terminal::{
 };
 use ratatui::backend::{Backend, CrosstermBackend};
 use ratatui::Terminal;
+use std::env;
 use std::io;
 use std::io::{stdin, stdout, Write};
 use std::panic;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    print!("Enter artist name: ");
-    let _ = stdout().flush();
-
     let mut search_query = String::new();
 
-    stdin().read_line(&mut search_query).unwrap();
+    if let Some(query) = env::args().nth(1) {
+        search_query = query;
+    } else {
+        print!("Enter artist name: ");
+        stdout().flush()?;
+
+        stdin().read_line(&mut search_query).unwrap();
+    }
 
     let mut app = App::new(&search_query)?;
 
