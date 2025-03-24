@@ -1,8 +1,7 @@
 use crate::app::{App, ListItemType};
 use ratatui::{
-    backend::Backend,
     style::{Color, Modifier, Style},
-    text::{Span, Spans},
+    text::{Line, Span},
     widgets::{List, ListItem, ListState},
     Frame,
 };
@@ -69,7 +68,7 @@ impl<T> StatefulList<T> {
     }
 }
 
-pub fn render<B: Backend>(f: &mut Frame<B>, app: &mut App) {
+pub fn render(f: &mut Frame, app: &mut App) {
     if app.releases.is_some() {
         render_releases(f, app);
     } else {
@@ -77,7 +76,7 @@ pub fn render<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     }
 }
 
-pub fn render_search_results<B: Backend>(f: &mut Frame<B>, app: &mut App) {
+pub fn render_search_results(f: &mut Frame, app: &mut App) {
     let artists = app
         .search_results
         .items
@@ -93,10 +92,10 @@ pub fn render_search_results<B: Backend>(f: &mut Frame<B>, app: &mut App) {
             .add_modifier(Modifier::BOLD),
     );
 
-    f.render_stateful_widget(artists, f.size(), &mut app.search_results.state);
+    f.render_stateful_widget(artists, f.area(), &mut app.search_results.state);
 }
 
-pub fn render_releases<B: Backend>(f: &mut Frame<B>, app: &mut App) {
+pub fn render_releases(f: &mut Frame, app: &mut App) {
     let Some(releases) = &mut app.releases else {
         return;
     };
@@ -156,9 +155,9 @@ pub fn render_releases<B: Backend>(f: &mut Frame<B>, app: &mut App) {
             }
         };
 
-        list_items.push(ListItem::new(Spans::from(item)));
+        list_items.push(ListItem::new(Line::from(item)));
     }
 
     let list = List::new(list_items);
-    f.render_stateful_widget(list, f.size(), &mut releases.state);
+    f.render_stateful_widget(list, f.area(), &mut releases.state);
 }

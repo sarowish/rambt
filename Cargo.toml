@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-musicbrainz_rs = "0.5.0"
-futures = "0.3.27"
-ratatui = "0.20.1"
-tokio = { version = "1.26.0", features = ["time", "macros", "rt-multi-thread"] }
-rusqlite = "0.28.0"
-crossterm = "0.26.1"
-anyhow = "1.0.70"
-dirs = "5.0.0"
-serde = "1.0.217"
-serde_json = "1.0.135"
+musicbrainz_rs = "0.9.1"
+futures = "0.3.31"
+ratatui = "0.29.0"
+tokio = { version = "1.44.1", features = ["time", "macros", "rt-multi-thread"] }
+rusqlite = "0.34.0"
+crossterm = "0.28.1"
+anyhow = "1.0.97"
+dirs = "6.0.0"
+serde = "1.0.219"
+serde_json = "1.0.140"
