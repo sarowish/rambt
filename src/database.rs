@@ -1,4 +1,4 @@
-use crate::musicbrainz::Release;
+use crate::{musicbrainz::Release, rating::Rated};
 use anyhow::Result;
 use rusqlite::{params, Connection};
 
@@ -69,6 +69,25 @@ pub fn get_ratings(conn: &Connection, artist_id: &str) -> Result<Vec<(String, u8
     let mut ratings = Vec::new();
 
     for rating in stmt.query_map(params![artist_id], |row| Ok((row.get(0)?, row.get(1)?)))? {
+        ratings.push(rating?);
+    }
+
+    Ok(ratings)
+}
+
+pub fn get_every_rating(conn: &Connection) -> Result<Vec<Rated>> {
+    let mut stmt = conn.prepare(
+        "
+            SELECT artists.artist_id, artists.artist_name, release_id, release_name, rating
+            FROM releases
+            INNER JOIN artists ON artists.artist_id = releases.artist_id
+            ORDER BY rating DESC
+        ",
+    )?;
+
+    let mut ratings = Vec::new();
+
+    for rating in stmt.query_map(params![], |row| Rated::try_from(row))? {
         ratings.push(rating?);
     }
 

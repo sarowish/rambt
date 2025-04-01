@@ -1,4 +1,4 @@
-use crate::app::ReleaseType;
+use crate::{app::ReleaseType, rating::Rate};
 use musicbrainz_rs::{
     entity::{
         artist::{Artist, ArtistSearchQuery},
@@ -30,6 +30,7 @@ impl From<&Artist> for ArtistSearchResult {
     }
 }
 
+#[derive(Default)]
 pub struct Release {
     pub id: String,
     pub title: String,
@@ -38,21 +39,9 @@ pub struct Release {
     pub rating: Option<u8>,
 }
 
-impl Release {
-    pub fn increase_rating(&mut self) {
-        if let Some(rating) = self.rating.as_mut() {
-            if *rating != 10 {
-                *rating += 1;
-            }
-        }
-    }
-
-    pub fn decrease_rating(&mut self) {
-        if let Some(rating) = self.rating.as_mut() {
-            if *rating != 1 {
-                *rating -= 1;
-            }
-        }
+impl Rate for Release {
+    fn rating(&mut self) -> &mut Option<u8> {
+        &mut self.rating
     }
 }
 

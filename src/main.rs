@@ -1,6 +1,8 @@
 mod app;
+mod cli;
 mod database;
 mod musicbrainz;
+mod rating;
 mod ui;
 mod utils;
 
@@ -15,25 +17,26 @@ use crossterm::terminal::{
 };
 use ratatui::backend::{Backend, CrosstermBackend};
 use ratatui::Terminal;
-use std::env;
 use std::io;
 use std::io::{stdin, stdout, Write};
 use std::panic;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mut search_query = String::new();
+    let clap_args = cli::get_matches();
 
-    if let Some(query) = env::args().nth(1) {
-        search_query = query;
+    let mut app = if clap_args.get_flag("rated") {
+        App::list_rated()?
+    } else if let Some(query) = clap_args.get_one::<String>("artist") {
+        App::search(query)?
     } else {
         print!("Enter artist name: ");
         stdout().flush()?;
 
+        let mut search_query = String::new();
         stdin().read_line(&mut search_query).unwrap();
-    }
-
-    let mut app = App::new(&search_query)?;
+        App::search(&search_query)?
+    };
 
     let default_hook = panic::take_hook();
 

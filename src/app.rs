@@ -1,4 +1,10 @@
-use crate::{database, musicbrainz::*, ui::StatefulList, utils::get_database_path};
+use crate::{
+    database,
+    musicbrainz::*,
+    rating::{Rate, Rated},
+    ui::StatefulList,
+    utils::get_database_path,
+};
 use anyhow::Result;
 use futures::executor;
 use musicbrainz_rs::entity::release_group::{ReleaseGroupPrimaryType, ReleaseGroupSecondaryType};
@@ -6,7 +12,7 @@ use rusqlite::Connection;
 use serde::Serialize;
 use std::fmt::Display;
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Default, PartialEq, Eq, Clone)]
 pub struct ReleaseType {
     primary: Option<ReleaseGroupPrimaryType>,
     secondary: Vec<ReleaseGroupSecondaryType>,
@@ -48,15 +54,16 @@ pub enum ListItemType {
 }
 
 pub struct App {
-    pub search_results: StatefulList<ArtistSearchResult>,
+    pub search_results: Option<StatefulList<ArtistSearchResult>>,
     pub releases: Option<StatefulList<ListItemType>>,
+    pub rated_list: Option<StatefulList<Rated>>,
     pub currently_rating: bool,
     previous_rating: Option<u8>,
     conn: Connection,
 }
 
 impl App {
-    pub fn new(search_query: &str) -> Result<Self> {
+    pub fn search(search_query: &str) -> Result<Self> {
         let search_results = executor::block_on(search_artist(search_query)).unwrap_or_default();
 
         if search_results.is_empty() {
@@ -65,8 +72,9 @@ impl App {
         }
 
         let app = App {
-            search_results: StatefulList::with_items(search_results),
+            search_results: Some(StatefulList::with_items(search_results)),
             releases: None,
+            rated_list: None,
             currently_rating: false,
             previous_rating: None,
             conn: Connection::open(get_database_path()?)?,
@@ -77,24 +85,39 @@ impl App {
         Ok(app)
     }
 
-    fn get_selected_release(&self) -> &Release {
-        if let Some(releases) = &self.releases {
-            if let Some(ListItemType::Release(release)) = releases.get_selected() {
-                return release;
-            }
-        }
+    pub fn list_rated() -> Result<Self> {
+        let conn = Connection::open(get_database_path()?)?;
 
-        unreachable!();
+        let app = App {
+            search_results: None,
+            releases: None,
+            rated_list: Some(StatefulList::with_items(database::get_every_rating(&conn)?)),
+            currently_rating: false,
+            previous_rating: None,
+            conn,
+        };
+
+        Ok(app)
     }
 
-    fn get_mut_selected_release(&mut self) -> &mut Release {
-        if let Some(releases) = &mut self.releases {
-            if let Some(ListItemType::Release(release)) = releases.get_mut_selected() {
-                return release;
+    fn get_selected_release(&self) -> Option<&Release> {
+        if let Some(releases) = &self.releases {
+            if let Some(ListItemType::Release(release)) = releases.get_selected() {
+                return Some(release);
             }
         }
 
-        unreachable!();
+        None
+    }
+
+    fn get_mut_selected_release(&mut self) -> Option<&mut Release> {
+        if let Some(releases) = &mut self.releases {
+            if let Some(ListItemType::Release(release)) = releases.get_mut_selected() {
+                return Some(release);
+            }
+        }
+
+        None
     }
 
     pub fn on_down(&mut self) {
@@ -108,8 +131,10 @@ impl App {
             if let Some(ListItemType::ReleaseType(_)) = releases.get_selected() {
                 releases.next();
             }
-        } else {
-            self.search_results.next();
+        } else if let Some(results) = &mut self.search_results {
+            results.next();
+        } else if let Some(rated) = &mut self.rated_list {
+            rated.next();
         }
     }
 
@@ -124,14 +149,20 @@ impl App {
             if let Some(ListItemType::ReleaseType(_)) = releases.get_selected() {
                 releases.previous();
             }
-        } else {
-            self.search_results.previous();
+        } else if let Some(results) = &mut self.search_results {
+            results.previous();
+        } else if let Some(rated) = &mut self.rated_list {
+            rated.previous();
         }
     }
 
     pub fn on_left(&mut self) {
         if self.currently_rating {
-            self.get_mut_selected_release().decrease_rating();
+            if let Some(release) = self.get_mut_selected_release() {
+                release.decrease_rating();
+            } else if let Some(list) = &mut self.rated_list {
+                list.get_mut_selected().unwrap().decrease_rating();
+            }
         } else if self.releases.is_some() {
             std::mem::take(&mut self.releases);
         }
@@ -139,9 +170,17 @@ impl App {
 
     pub fn on_right(&mut self) -> Result<()> {
         if self.currently_rating {
-            self.get_mut_selected_release().increase_rating();
-        } else if self.releases.is_none() {
-            if let Some(artist) = self.search_results.get_selected() {
+            if let Some(release) = self.get_mut_selected_release() {
+                release.increase_rating();
+            } else if let Some(list) = &mut self.rated_list {
+                list.get_mut_selected().unwrap().increase_rating();
+            }
+        } else if self.releases.is_none() && self.search_results.is_some() {
+            if let Some(artist) = self
+                .search_results
+                .as_ref()
+                .and_then(StatefulList::get_selected)
+            {
                 if let Ok(Some(mut releases)) = executor::block_on(fetch_releases(&artist.id)) {
                     let ratings = database::get_ratings(&self.conn, &artist.id)?;
 
@@ -166,17 +205,36 @@ impl App {
 
     pub fn start_rating(&mut self) {
         self.currently_rating = true;
-        self.previous_rating = self.get_selected_release().rating;
-        let selected_release = self.get_mut_selected_release();
 
-        if selected_release.rating.is_none() {
-            selected_release.rating = Some(1);
+        if let Some(release) = self.get_selected_release() {
+            self.previous_rating = release.rating;
+            let release = self.get_mut_selected_release().unwrap();
+
+            if release.rating.is_none() {
+                release.rating = Some(1);
+            }
+        } else if let Some(item) = self
+            .rated_list
+            .as_mut()
+            .and_then(StatefulList::get_mut_selected)
+        {
+            self.previous_rating = item.rating;
+
+            if item.rating.is_none() {
+                item.rating = Some(1);
+            }
         }
     }
 
     pub fn set_rating(&mut self, rating: u8) {
-        if self.currently_rating {
-            self.get_mut_selected_release().rating = Some(rating);
+        if !self.currently_rating {
+            return;
+        }
+
+        if let Some(list) = &mut self.rated_list {
+            list.get_mut_selected().unwrap().set_rating(rating);
+        } else if let Some(release) = self.get_mut_selected_release() {
+            release.set_rating(rating);
         }
     }
 
@@ -185,11 +243,28 @@ impl App {
             return Ok(());
         }
 
-        let artist = self.search_results.get_selected().unwrap();
-        let release = self.get_selected_release();
+        if let Some(artist) = self
+            .search_results
+            .as_ref()
+            .and_then(StatefulList::get_selected)
+        {
+            let release = self.get_selected_release().unwrap();
 
-        database::add_artist(&self.conn, &artist.id, &artist.name)?;
-        database::add_release(&self.conn, &artist.id, release)?;
+            database::add_artist(&self.conn, &artist.id, &artist.name)?;
+            database::add_release(&self.conn, &artist.id, release)?;
+        } else if let Some(list) = &self.rated_list {
+            let item = list.get_selected().unwrap();
+            database::add_release(
+                &self.conn,
+                &item.artist_id,
+                &Release {
+                    id: item.release_id.clone(),
+                    title: item.title.clone(),
+                    rating: item.rating,
+                    ..Release::default()
+                },
+            )?;
+        }
 
         self.currently_rating = false;
 
@@ -202,7 +277,17 @@ impl App {
         }
 
         self.currently_rating = false;
-        self.get_mut_selected_release().rating = self.previous_rating;
+        let prev = self.previous_rating;
+
+        if let Some(release) = self.get_mut_selected_release() {
+            release.rating = prev;
+        } else if let Some(item) = self
+            .rated_list
+            .as_mut()
+            .and_then(StatefulList::get_mut_selected)
+        {
+            item.rating = prev;
+        }
     }
 }
 
