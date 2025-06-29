@@ -120,6 +120,12 @@ impl App {
         None
     }
 
+    pub fn get_selected_artist(&self) -> Option<&ArtistSearchResult> {
+        self.search_results
+            .as_ref()
+            .and_then(StatefulList::get_selected)
+    }
+
     pub fn on_down(&mut self) {
         if self.currently_rating {
             return;
@@ -175,26 +181,22 @@ impl App {
             } else if let Some(list) = &mut self.rated_list {
                 list.get_mut_selected().unwrap().increase_rating();
             }
-        } else if self.releases.is_none() && self.search_results.is_some() {
-            if let Some(artist) = self
-                .search_results
-                .as_ref()
-                .and_then(StatefulList::get_selected)
-            {
-                if let Ok(Some(mut releases)) = executor::block_on(fetch_releases(&artist.id)) {
-                    let ratings = database::get_ratings(&self.conn, &artist.id)?;
+        } else if self.releases.is_none()
+            && let Some(artist) = self.get_selected_artist()
+        {
+            if let Ok(Some(mut releases)) = executor::block_on(fetch_releases(&artist.id)) {
+                let ratings = database::get_ratings(&self.conn, &artist.id)?;
 
-                    for rating in ratings {
-                        for release in &mut releases {
-                            if release.id == rating.0 {
-                                release.rating = Some(rating.1);
-                            }
+                for rating in ratings {
+                    for release in &mut releases {
+                        if release.id == rating.0 {
+                            release.rating = Some(rating.1);
                         }
                     }
-
-                    self.releases = Some(StatefulList::with_items(insert_headers(releases)));
-                    self.releases.as_mut().unwrap().next();
                 }
+
+                self.releases = Some(StatefulList::with_items(insert_headers(releases)));
+                self.releases.as_mut().unwrap().next();
             }
         } else {
             self.start_rating();
@@ -243,11 +245,7 @@ impl App {
             return Ok(());
         }
 
-        if let Some(artist) = self
-            .search_results
-            .as_ref()
-            .and_then(StatefulList::get_selected)
-        {
+        if let Some(artist) = self.get_selected_artist() {
             let release = self.get_selected_release().unwrap();
 
             database::add_artist(&self.conn, &artist.id, &artist.name)?;

@@ -3,10 +3,10 @@ use crate::{
     musicbrainz::ArtistSearchResult,
 };
 use ratatui::{
+    Frame,
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, List, ListItem, ListState},
-    Frame,
 };
 
 pub struct StatefulList<T> {
@@ -101,7 +101,7 @@ pub fn render_search_results(f: &mut Frame, results: &mut StatefulList<ArtistSea
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .title("Releases")
+                .title("Search Results")
                 .title_style(Style::default().cyan().bold()),
         );
 
@@ -109,6 +109,10 @@ pub fn render_search_results(f: &mut Frame, results: &mut StatefulList<ArtistSea
 }
 
 pub fn render_releases(f: &mut Frame, app: &mut App) {
+    let Some(artist_name) = app.get_selected_artist().map(|artist| artist.name.clone()) else {
+        return;
+    };
+
     let Some(releases) = &mut app.releases else {
         return;
     };
@@ -137,7 +141,7 @@ pub fn render_releases(f: &mut Frame, app: &mut App) {
         Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .title("Releases")
+            .title(artist_name)
             .title_style(Style::default().cyan().bold()),
     );
     f.render_stateful_widget(list, f.area(), &mut releases.state);
@@ -164,7 +168,7 @@ pub fn render_ratings(f: &mut Frame, app: &mut App) {
         Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .title("Releases")
+            .title("Ratings")
             .title_style(Style::default().fg(Color::Cyan).bold()),
     );
     f.render_stateful_widget(list, f.area(), &mut rated.state);
