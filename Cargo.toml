@@ -4,14 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-musicbrainz_rs = "0.9.1"
+musicbrainz_rs = "0.12.0"
 futures = "0.3.31"
 ratatui = "0.29.0"
-tokio = { version = "1.44.1", features = ["time", "macros", "rt-multi-thread"] }
-rusqlite = "0.34.0"
-crossterm = "0.28.1"
-anyhow = "1.0.97"
+tokio = { version = "1.46.1", features = ["time", "macros", "rt-multi-thread"] }
+rusqlite = "0.37.0"
+crossterm = "0.29.0"
+anyhow = "1.0.98"
 dirs = "6.0.0"
 serde = "1.0.219"
 serde_json = "1.0.140"
-clap = "4.5.34"
+clap = "4.5.41"

@@ -1,5 +1,6 @@
 use crate::{app::ReleaseType, rating::Rate};
 use musicbrainz_rs::{
+    chrono::Datelike,
     entity::{
         artist::{Artist, ArtistSearchQuery},
         release_group::ReleaseGroup,
@@ -34,7 +35,7 @@ impl From<&Artist> for ArtistSearchResult {
 pub struct Release {
     pub id: String,
     pub title: String,
-    pub year: String,
+    pub year: i32,
     pub group_type: ReleaseType,
     pub rating: Option<u8>,
 }
@@ -58,9 +59,9 @@ impl From<ReleaseGroup> for Release {
             title: value.title.to_string(),
             year: value
                 .first_release_date
+                .and_then(|date| date.into_naive_date(1, 1, 1).ok())
                 .unwrap_or_default()
-                .format("%Y")
-                .to_string(),
+                .year(),
             group_type: ReleaseType::new(value.primary_type, value.secondary_types),
             rating: None,
         }
