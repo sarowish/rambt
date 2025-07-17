@@ -70,10 +70,10 @@ fn run_tui<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> 
         if let Event::Key(key) = crossterm::event::read()? {
             match key.code {
                 KeyCode::Char('q') => break,
-                KeyCode::Char('h') => app.on_left(),
-                KeyCode::Char('l') => app.on_right()?,
-                KeyCode::Char('j') => app.on_down(),
-                KeyCode::Char('k') => app.on_up(),
+                KeyCode::Char('h') | KeyCode::Left => app.on_left(),
+                KeyCode::Char('l') | KeyCode::Right => app.on_right()?,
+                KeyCode::Char('j') | KeyCode::Down => app.on_down(),
+                KeyCode::Char('k') | KeyCode::Up => app.on_up(),
                 KeyCode::Char(c) => match c {
                     rating @ '1'..='9' => app.set_rating(rating.to_digit(10).unwrap() as u8),
                     '0' => app.set_rating(10),
